@@ -1,0 +1,114 @@
+import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  Users,
+  Warehouse,
+  BarChart3,
+  Percent,
+  Star,
+  Settings,
+  LogOut,
+  ChevronLeft,
+  Menu,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const menuItems = [
+  { title: "Dashboard", icon: LayoutDashboard, path: "/" },
+  { title: "Orders", icon: ShoppingCart, path: "/orders" },
+  { title: "Products", icon: Package, path: "/products" },
+  { title: "Customers", icon: Users, path: "/customers" },
+  { title: "Inventory", icon: Warehouse, path: "/inventory" },
+  { title: "Analytics", icon: BarChart3, path: "/analytics" },
+  { title: "Discounts", icon: Percent, path: "/discounts" },
+  { title: "Reviews", icon: Star, path: "/reviews" },
+  { title: "Settings", icon: Settings, path: "/settings" },
+];
+
+interface SidebarProps {
+  collapsed: boolean;
+  onToggle: () => void;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+}
+
+export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
+  const location = useLocation();
+
+  return (
+    <>
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm lg:hidden"
+          onClick={onMobileClose}
+        />
+      )}
+
+      <aside
+        className={cn(
+          "fixed top-0 left-0 z-50 flex h-screen flex-col border-r border-border bg-sidebar transition-all duration-300",
+          collapsed ? "w-[68px]" : "w-[260px]",
+          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        )}
+      >
+        {/* Logo */}
+        <div className="flex h-16 items-center justify-between border-b border-border px-4">
+          {!collapsed && (
+            <span className="font-heading text-xl font-black tracking-wider text-foreground">
+              NEVER<span className="text-primary">SORE</span>
+            </span>
+          )}
+          {collapsed && (
+            <span className="font-heading text-xl font-black text-primary mx-auto">N</span>
+          )}
+          <button
+            onClick={onToggle}
+            className="hidden lg:flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            <ChevronLeft className={cn("h-4 w-4 transition-transform", collapsed && "rotate-180")} />
+          </button>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto py-4 px-2">
+          <ul className="space-y-1">
+            {menuItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <li key={item.path}>
+                  <NavLink
+                    to={item.path}
+                    onClick={onMobileClose}
+                    className={cn(
+                      "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                      isActive
+                        ? "bg-primary/10 text-foreground border-l-2 border-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-l-2 border-transparent"
+                    )}
+                  >
+                    <item.icon className={cn("h-5 w-5 shrink-0", isActive && "text-primary")} />
+                    {!collapsed && <span>{item.title}</span>}
+                  </NavLink>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {/* Logout */}
+        <div className="border-t border-border p-2">
+          <button
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="h-5 w-5 shrink-0" />
+            {!collapsed && <span>Logout</span>}
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}
