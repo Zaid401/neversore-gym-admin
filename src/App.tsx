@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Dashboard from "./pages/Index";
 import Orders from "./pages/Orders";
@@ -13,9 +14,38 @@ import Analytics from "./pages/Analytics";
 import Discounts from "./pages/Discounts";
 import Reviews from "./pages/Reviews";
 import Settings from "./pages/Settings";
+import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+const AppRoutes = () => {
+  const { isAuthenticated } = useAuth();
+
+  return (
+    <Routes>
+      <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
+      <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/orders" element={<Orders />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/inventory" element={<Inventory />} />
+        <Route path="/analytics" element={<Analytics />} />
+        <Route path="/discounts" element={<Discounts />} />
+        <Route path="/reviews" element={<Reviews />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -23,20 +53,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route element={<DashboardLayout />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/orders" element={<Orders />} />
-            <Route path="/products" element={<Products />} />
-            <Route path="/customers" element={<Customers />} />
-            <Route path="/inventory" element={<Inventory />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/discounts" element={<Discounts />} />
-            <Route path="/reviews" element={<Reviews />} />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
