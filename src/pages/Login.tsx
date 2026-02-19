@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { Lock, Mail, Eye, EyeOff, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function Login() {
@@ -11,16 +11,20 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (login(email, password)) {
+    setIsSubmitting(true);
+    const { error } = await login(email, password);
+    setIsSubmitting(false);
+    if (!error) {
       navigate("/");
     } else {
-      setError("Invalid email or password");
+      setError(error);
     }
   };
 
@@ -91,8 +95,9 @@ export default function Login() {
             <Button
               type="submit"
               className="w-full uppercase tracking-widest font-semibold"
+              disabled={isSubmitting}
             >
-              Sign In
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign In"}
             </Button>
           </form>
         </div>

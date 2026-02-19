@@ -1,17 +1,92 @@
-import { AlertTriangle, Package } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Package, Loader2, X } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
+import Paginator from "@/components/ui/Paginator";
 
-const inventory = [
-  { name: "Jet Black Stringer", sku: "NS-ST-001", stock: 45, reorder: 10, status: "ok" },
-  { name: "Power Joggers", sku: "NS-JG-002", stock: 28, reorder: 15, status: "ok" },
-  { name: "Iron Compression Tee", sku: "NS-CT-003", stock: 3, reorder: 10, status: "low" },
-  { name: "Beast Mode Hoodie", sku: "NS-HD-004", stock: 52, reorder: 10, status: "ok" },
-  { name: "Stealth Shorts", sku: "NS-SH-005", stock: 0, reorder: 20, status: "out" },
-  { name: "Titan Tank", sku: "NS-TT-006", stock: 67, reorder: 15, status: "ok" },
-];
+const PAGE_SIZE = 15;
+
+interface Variant {
+  id: string;
+  sku: string;
+  stock_quantity: number;
+  low_stock_threshold: number;
+  products: { name: string } | null;
+  product_colors: { color_name: string } | null;
+  product_sizes: { size_label: string } | null;
+}
 
 export default function Inventory() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [page, setPage] = useState(1);
+  const [adjustVariant, setAdjustVariant] = useState<Variant | null>(null);
+  const [newQty, setNewQty] = useState("");
+  const [reason, setReason] = useState("")
+
+  const { data: { variants, total } = { variants: [], total: 0 }, isLoading } = useQuery<{ variants: Variant[]; total: number }>({
+    queryKey: ["inventory", page],
+    queryFn: async () => {
+      const from = (page - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      const { data, error, count } = await supabase
+        .from("product_variants")
+        .select("id,sku,stock_quantity,low_stock_threshold,products(name),product_colors(color_name),product_sizes(size_label)", { count: "exact" })
+        .order("stock_quantity", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      return { variants: (data || []) as Variant[], total: count ?? 0 };
+    },
+  });
+
+  const adjustMutation = useMutation({
+    mutationFn: async () => {
+      const qty = parseInt(newQty);
+      if (isNaN(qty) || qty < 0) throw new Error("Invalid quantity");
+      const diff = qty - adjustVariant!.stock_quantity;
+      const { error: updateErr } = await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", adjustVariant!.id);
+      if (updateErr) throw updateErr;
+      const { error: logErr } = await supabase.from("inventory_logs").insert({
+        variant_id: adjustVariant!.id,
+        change_type: diff >= 0 ? "restock" : "manual_adjustment",
+        quantity_change: diff,
+        new_quantity: qty,
+        reason: reason || "Manual admin adjustment",
+      });
+      if (logErr) throw logErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      toast({ title: "Stock updated" });
+      setAdjustVariant(null);
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const getStatus = (v: Variant) => {
+    if (v.stock_quantity === 0) return "out";
+    if (v.stock_quantity <= v.low_stock_threshold) return "low";
+    return "ok";
+  };
+
+  const lowCount = variants.filter((v) => getStatus(v) !== "ok").length;
+
+  const openAdjust = (v: Variant) => {
+    setAdjustVariant(v);
+    setNewQty(String(v.stock_quantity));
+    setReason("");
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {lowCount > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          <span><strong>{lowCount}</strong> variant{lowCount !== 1 ? "s" : ""} need restocking (low or out of stock)</span>
+        </div>
+      )}
+
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -19,44 +94,81 @@ export default function Inventory() {
               <tr className="border-b border-border bg-secondary/50">
                 <th className="px-6 py-3 text-left font-medium text-muted-foreground">Product</th>
                 <th className="px-6 py-3 text-left font-medium text-muted-foreground">SKU</th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">Variant</th>
                 <th className="px-6 py-3 text-left font-medium text-muted-foreground">Stock</th>
-                <th className="px-6 py-3 text-left font-medium text-muted-foreground">Reorder Level</th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">Threshold</th>
                 <th className="px-6 py-3 text-left font-medium text-muted-foreground">Status</th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {inventory.map((item) => (
-                <tr key={item.sku} className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors">
-                  <td className="px-6 py-4 font-medium flex items-center gap-2">
-                    <Package className="h-4 w-4 text-muted-foreground" />
-                    {item.name}
-                  </td>
-                  <td className="px-6 py-4 text-muted-foreground">{item.sku}</td>
-                  <td className="px-6 py-4">
-                    <span className={item.status !== "ok" ? "text-destructive font-medium" : ""}>{item.stock}</span>
-                  </td>
-                  <td className="px-6 py-4 text-muted-foreground">{item.reorder}</td>
-                  <td className="px-6 py-4">
-                    {item.status === "low" && (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-warning">
-                        <AlertTriangle className="h-3 w-3" /> Low Stock
-                      </span>
-                    )}
-                    {item.status === "out" && (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive">
-                        <AlertTriangle className="h-3 w-3" /> Out of Stock
-                      </span>
-                    )}
-                    {item.status === "ok" && (
-                      <span className="text-xs font-medium text-success">In Stock</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {isLoading ? (
+                <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">Loading...</td></tr>
+              ) : variants.length === 0 ? (
+                <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">No variants found</td></tr>
+              ) : variants.map((v) => {
+                const status = getStatus(v);
+                return (
+                  <tr key={v.id} className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors">
+                    <td className="px-6 py-4 font-medium flex items-center gap-2">
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                      {v.products?.name ?? "—"}
+                    </td>
+                    <td className="px-6 py-4 text-muted-foreground font-mono text-xs">{v.sku}</td>
+                    <td className="px-6 py-4 text-muted-foreground">
+                      {[v.product_colors?.color_name, v.product_sizes?.size_label].filter(Boolean).join(" / ")}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={status !== "ok" ? "text-destructive font-semibold" : ""}>{v.stock_quantity}</span>
+                    </td>
+                    <td className="px-6 py-4 text-muted-foreground">{v.low_stock_threshold}</td>
+                    <td className="px-6 py-4">
+                      {status === "low" && <span className="inline-flex items-center gap-1 text-xs font-medium text-warning"><AlertTriangle className="h-3 w-3" /> Low Stock</span>}
+                      {status === "out" && <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive"><AlertTriangle className="h-3 w-3" /> Out of Stock</span>}
+                      {status === "ok" && <span className="text-xs font-medium text-success">In Stock</span>}
+                    </td>
+                    <td className="px-6 py-4">
+                      <button onClick={() => openAdjust(v)} className="rounded-md px-2 py-1 text-xs text-primary hover:bg-primary/10 transition-colors">Adjust</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
+
+      <Paginator page={page} total={total} pageSize={PAGE_SIZE} onPage={setPage} />
+
+      {adjustVariant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={() => setAdjustVariant(null)}>
+          <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6 shadow-xl mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-heading text-lg font-bold">Adjust Stock</h2>
+              <button onClick={() => setAdjustVariant(null)} className="p-1 text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">{adjustVariant.products?.name} — {[adjustVariant.product_colors?.color_name, adjustVariant.product_sizes?.size_label].filter(Boolean).join(" / ")}</p>
+            <p className="text-xs text-muted-foreground mb-4 font-mono">{adjustVariant.sku} · Current: <strong>{adjustVariant.stock_quantity}</strong></p>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-muted-foreground mb-1 block">New Quantity</label>
+                <input type="number" min="0" value={newQty} onChange={(e) => setNewQty(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground mb-1 block">Reason (optional)</label>
+                <input value={reason} onChange={(e) => setReason(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <button onClick={() => adjustMutation.mutate()} disabled={adjustMutation.isPending || newQty === ""}
+                className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                {adjustMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                Update Stock
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

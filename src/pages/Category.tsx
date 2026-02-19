@@ -1,195 +1,198 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Tags } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Plus, Pencil, Trash2, Loader2, X } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
+import Paginator from "@/components/ui/Paginator";
+
+const PAGE_SIZE = 15;
 
 interface Category {
-  id: number;
+  id: string;
   name: string;
-  productCount: number;
+  slug: string;
+  description: string | null;
+  image_url: string | null;
+  is_active: boolean;
+  sort_order: number;
+  products: { count: number }[];
+}
+
+function slugify(s: string) {
+  return s.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 }
 
 export default function Category() {
-  const [categories, setCategories] = useState<Category[]>([
-    { id: 1, name: "Upper", productCount: 24 },
-    { id: 2, name: "Bottom", productCount: 18 },
-    { id: 3, name: "Active", productCount: 32 },
-    { id: 4, name: "Casual", productCount: 15 },
-  ]);
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [showModal, setShowModal] = useState(false);
+  const [editCat, setEditCat] = useState<Category | null>(null);
+  const [form, setForm] = useState({ name: "", description: "", image_url: "", sort_order: "0" });
+  const [page, setPage] = useState(1);
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [categoryName, setCategoryName] = useState("");
+  const { data: { categories, total } = { categories: [], total: 0 }, isLoading } = useQuery<{ categories: Category[]; total: number }>({
+    queryKey: ["categories-admin", page],
+    queryFn: async () => {
+      const from = (page - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      const { data, error, count } = await supabase
+        .from("categories")
+        .select("id,name,slug,description,image_url,is_active,sort_order,products(count)", { count: "exact" })
+        .order("sort_order")
+        .range(from, to);
+      if (error) throw error;
+      return { categories: (data || []) as Category[], total: count ?? 0 };
+    },
+  });
 
-  const handleAddCategory = () => {
-    setEditingCategory(null);
-    setCategoryName("");
-    setIsDialogOpen(true);
-  };
-
-  const handleEditCategory = (category: Category) => {
-    setEditingCategory(category);
-    setCategoryName(category.name);
-    setIsDialogOpen(true);
-  };
-
-  const handleSaveCategory = () => {
-    if (!categoryName.trim()) return;
-
-    if (editingCategory) {
-      // Edit existing category
-      setCategories(
-        categories.map((cat) =>
-          cat.id === editingCategory.id ? { ...cat, name: categoryName } : cat
-        )
-      );
-    } else {
-      // Add new category
-      const newCategory: Category = {
-        id: Math.max(...categories.map((c) => c.id), 0) + 1,
-        name: categoryName,
-        productCount: 0,
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        name: form.name,
+        slug: slugify(form.name),
+        description: form.description || null,
+        image_url: form.image_url || null,
+        sort_order: parseInt(form.sort_order) || 0,
       };
-      setCategories([...categories, newCategory]);
-    }
+      if (editCat) {
+        const { error } = await supabase.from("categories").update(payload).eq("id", editCat.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("categories").insert({ ...payload, is_active: true });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["categories-admin"] });
+      qc.invalidateQueries({ queryKey: ["categories"] });
+      toast({ title: editCat ? "Category updated" : "Category created" });
+      closeModal();
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
 
-    setIsDialogOpen(false);
-    setCategoryName("");
-    setEditingCategory(null);
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase.from("categories").update({ is_active: !is_active }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["categories-admin"] }),
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const openAdd = () => {
+    setEditCat(null);
+    setForm({ name: "", description: "", image_url: "", sort_order: "0" });
+    setShowModal(true);
   };
 
-  const handleDeleteCategory = (id: number) => {
-    if (confirm("Are you sure you want to delete this category?")) {
-      setCategories(categories.filter((cat) => cat.id !== id));
-    }
+  const openEdit = (cat: Category) => {
+    setEditCat(cat);
+    setForm({ name: cat.name, description: cat.description || "", image_url: cat.image_url || "", sort_order: String(cat.sort_order) });
+    setShowModal(true);
   };
+
+  const closeModal = () => { setShowModal(false); setEditCat(null); };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-heading font-bold tracking-tight text-foreground">
-            Categories
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your product categories
-          </p>
+          <h1 className="text-3xl font-heading font-bold tracking-tight text-foreground">Categories</h1>
+          <p className="text-muted-foreground mt-1">Manage your product categories</p>
         </div>
-        <Button onClick={handleAddCategory} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Category
-        </Button>
+        <button onClick={openAdd}
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors">
+          <Plus className="h-4 w-4" /> Add Category
+        </button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Tags className="h-5 w-5" />
-            All Categories
-          </CardTitle>
-          <CardDescription>
-            View and manage all product categories
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Category Name</TableHead>
-                <TableHead>Products</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {categories.map((category) => (
-                <TableRow key={category.id}>
-                  <TableCell className="font-medium">{category.name}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{category.productCount} products</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEditCategory(category)}
-                        className="gap-1"
-                      >
-                        <Pencil className="h-3 w-3" />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDeleteCategory(category.id)}
-                        className="gap-1"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                        Delete
-                      </Button>
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-secondary/50">
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">Name</th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">Slug</th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">Products</th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">Sort Order</th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">Status</th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">Loading...</td></tr>
+              ) : categories.length === 0 ? (
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">No categories yet</td></tr>
+              ) : categories.map((cat) => (
+                <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors">
+                  <td className="px-6 py-4 font-medium">{cat.name}</td>
+                  <td className="px-6 py-4 text-muted-foreground font-mono text-xs">{cat.slug}</td>
+                  <td className="px-6 py-4">{(cat.products as any)?.[0]?.count ?? 0}</td>
+                  <td className="px-6 py-4 text-muted-foreground">{cat.sort_order}</td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cat.is_active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
+                      {cat.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openEdit(cat)} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => toggleMutation.mutate({ id: cat.id, is_active: cat.is_active })}
+                        className="rounded-md p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title={cat.is_active ? "Deactivate" : "Activate"}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-      {/* Add/Edit Category Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingCategory ? "Edit Category" : "Add New Category"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingCategory
-                ? "Update the category name below."
-                : "Enter a name for the new category."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="category-name">Category Name</Label>
-              <Input
-                id="category-name"
-                placeholder="e.g., Upper, Bottom, Active"
-                value={categoryName}
-                onChange={(e) => setCategoryName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSaveCategory()}
-              />
+      <Paginator page={page} total={total} pageSize={PAGE_SIZE} onPage={setPage} />
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={closeModal}>
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl animate-fade-in mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-heading text-lg font-bold">{editCat ? "Edit Category" : "Add Category"}</h2>
+              <button onClick={closeModal} className="p-1 text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-muted-foreground mb-1 block">Name *</label>
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground mb-1 block">Description</label>
+                <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-16 resize-none" />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground mb-1 block">Image URL</label>
+                <input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground mb-1 block">Sort Order</label>
+                <input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <button onClick={() => saveMutation.mutate()} disabled={!form.name || saveMutation.isPending}
+                className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                {saveMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                {editCat ? "Update" : "Create"}
+              </button>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveCategory}>
-              {editingCategory ? "Update" : "Add"} Category
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </div>
   );
 }
