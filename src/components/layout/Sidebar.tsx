@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Package,
+  Tags,
   Users,
   Warehouse,
   BarChart3,
@@ -20,6 +21,7 @@ const menuItems = [
   { title: "Dashboard", icon: LayoutDashboard, path: "/" },
   { title: "Orders", icon: ShoppingCart, path: "/orders" },
   { title: "Products", icon: Package, path: "/products" },
+  { title: "Category", icon: Tags, path: "/category" },
   { title: "Customers", icon: Users, path: "/customers" },
   { title: "Inventory", icon: Warehouse, path: "/inventory" },
   { title: "Analytics", icon: BarChart3, path: "/analytics" },
@@ -60,12 +62,18 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         {/* Logo */}
         <div className="flex h-16 items-center justify-between border-b border-border px-4">
           {!collapsed && (
-            <span className="font-heading text-xl font-black tracking-wider text-foreground">
-              NEVER<span className="text-primary">SORE</span>
-            </span>
+            <img 
+              src="/logo.png" 
+              alt="NEVERSORE" 
+              className="h-10"
+            />
           )}
           {collapsed && (
-            <span className="font-heading text-xl font-black text-primary mx-auto">N</span>
+            <img 
+              src="/collapsed-logo.png" 
+              alt="NEVERSORE" 
+              className="h-11 mx-auto"
+            />
           )}
           <button
             onClick={onToggle}

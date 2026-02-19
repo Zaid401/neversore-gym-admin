@@ -10,7 +10,7 @@ const products = [
   { id: 5, name: "Stealth Shorts", category: "Bottoms", price: "₹1,199", stock: 0, status: "inactive" as const, image: "SS" },
   { id: 6, name: "Titan Tank", category: "Tank Tops", price: "₹999", stock: 67, status: "active" as const, image: "TT" },
 ];
-
+  
 export default function Products() {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
