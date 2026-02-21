@@ -11,10 +11,17 @@ interface Order {
   id: string;
   order_number: string;
   status: string;
+  shipping_full_name: string;
+  shipping_phone: string;
+  shipping_address_line_1: string;
+  shipping_address_line_2: string | null;
+  shipping_city: string;
+  shipping_state: string;
+  shipping_postal_code: string;
+  shipping_country: string;
   payment_status: string;
   total_amount: number;
   created_at: string;
-  profiles: { full_name: string | null; email: string } | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -47,15 +54,25 @@ export default function Orders() {
     queryFn: async () => {
       const from = (page - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
+      const searchTerm = search.trim();
+      
+      // Fetch orders with shipping details
       let q = supabase
         .from("orders")
-        .select("id,order_number,status,payment_status,total_amount,created_at,profiles!user_id(full_name,email)", { count: "exact" })
+        .select("id,order_number,status,payment_status,total_amount,created_at,shipping_full_name,shipping_phone,shipping_address_line_1,shipping_address_line_2,shipping_city,shipping_state,shipping_postal_code,shipping_country", { count: "exact" })
         .order("created_at", { ascending: false })
         .range(from, to);
+      
       if (statusFilter !== "all") q = q.eq("status", statusFilter);
-      if (search.trim()) q = q.ilike("order_number", `%${search.trim()}%`);
+      
+      // Search by order number or customer name
+      if (searchTerm) {
+        q = q.or(`order_number.ilike.%${searchTerm}%,shipping_full_name.ilike.%${searchTerm}%`);
+      }
+      
       const { data, error, count } = await q;
       if (error) throw error;
+      
       return { orders: (data || []) as Order[], total: count ?? 0 };
     },
   });
@@ -75,7 +92,7 @@ export default function Orders() {
       toast({ title: "Order status updated" });
       setUpdateModal(null);
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const openUpdate = (o: Order) => {
@@ -121,7 +138,7 @@ export default function Orders() {
               ) : orders.map((order) => (
                 <tr key={order.id} className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors">
                   <td className="px-6 py-4 font-medium font-mono text-xs">{order.order_number}</td>
-                  <td className="px-6 py-4">{order.profiles?.full_name ?? order.profiles?.email ?? "—"}</td>
+                  <td className="px-6 py-4">{order.shipping_full_name ?? "—"}</td>
                   <td className="px-6 py-4 text-muted-foreground">{new Date(order.created_at).toLocaleDateString("en-IN")}</td>
                   <td className="px-6 py-4 font-medium">₹{order.total_amount.toLocaleString("en-IN")}</td>
                   <td className="px-6 py-4">
@@ -130,11 +147,12 @@ export default function Orders() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setViewOrder(order)} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-                        <Eye className="h-4 w-4" />
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setViewOrder(order)} className="rounded-md px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary transition-colors flex items-center gap-1.5">
+                        <Eye className="h-3.5 w-3.5" />
+                        View Details
                       </button>
-                      <button onClick={() => openUpdate(order)} className="rounded-md px-2 py-1 text-xs text-primary hover:bg-primary/10 transition-colors">
+                      <button onClick={() => openUpdate(order)} className="rounded-md px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors">
                         Update
                       </button>
                     </div>
@@ -150,33 +168,99 @@ export default function Orders() {
 
       {/* View Modal */}
       {viewOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={() => setViewOrder(null)}>
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-heading text-lg font-bold">Order {viewOrder.order_number}</h2>
+        <div className="fixed inset-0 z-50 flex justify-center bg-background/80 backdrop-blur-sm p-4 !mt-0" onClick={() => setViewOrder(null)}>
+          <div className="w-full max-w-2xl rounded-lg border border-border bg-card shadow-xl max-h-[95vh] md:max-h-[85vh] lg:max-h-[80vh] flex flex-col animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <h2 className="font-heading text-xl font-bold">Order Details</h2>
               <button onClick={() => setViewOrder(null)} className="p-1 text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between"><dt className="text-muted-foreground">Customer</dt><dd className="font-medium">{viewOrder.profiles?.full_name ?? "—"}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted-foreground">Email</dt><dd>{viewOrder.profiles?.email}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted-foreground">Date</dt><dd>{new Date(viewOrder.created_at).toLocaleDateString("en-IN")}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted-foreground">Total</dt><dd className="font-bold text-primary">₹{viewOrder.total_amount.toLocaleString("en-IN")}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted-foreground">Status</dt><dd><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[viewOrder.status] ?? ""}`}>{viewOrder.status}</span></dd></div>
-              <div className="flex justify-between"><dt className="text-muted-foreground">Payment</dt><dd>{viewOrder.payment_status}</dd></div>
-            </dl>
+            
+            <div className="space-y-6 p-6 overflow-y-auto">
+              {/* Order Info */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3">Order Information</h3>
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Order Number</dt>
+                    <dd className="font-mono font-medium">{viewOrder.order_number}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Date</dt>
+                    <dd className="font-medium">{new Date(viewOrder.created_at).toLocaleDateString("en-IN")}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Status</dt>
+                    <dd><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[viewOrder.status] ?? ""}`}>{viewOrder.status.replace("_", " ")}</span></dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Payment Status</dt>
+                    <dd className="font-medium capitalize">{viewOrder.payment_status}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-muted-foreground mb-0.5">Total Amount</dt>
+                    <dd className="font-bold text-lg text-primary">₹{viewOrder.total_amount.toLocaleString("en-IN")}</dd>
+                  </div>
+                </dl>
+              </div>
+              
+              {/* Shipping Address */}
+              <div className="border-t border-border pt-4">
+                <h3 className="text-sm font-semibold text-foreground mb-3">Shipping Address</h3>
+                <dl className="space-y-2 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Customer Name</dt>
+                    <dd className="font-medium">{viewOrder.shipping_full_name}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Phone Number</dt>
+                    <dd className="font-medium">{viewOrder.shipping_phone}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Address</dt>
+                    <dd className="font-medium">
+                      {viewOrder.shipping_address_line_1}
+                      {viewOrder.shipping_address_line_2 && (
+                        <>
+                          <br />
+                          {viewOrder.shipping_address_line_2}
+                        </>
+                      )}
+                    </dd>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <dt className="text-muted-foreground mb-0.5">City</dt>
+                      <dd className="font-medium">{viewOrder.shipping_city}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground mb-0.5">State</dt>
+                      <dd className="font-medium">{viewOrder.shipping_state}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground mb-0.5">Postal Code</dt>
+                      <dd className="font-medium">{viewOrder.shipping_postal_code}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground mb-0.5">Country</dt>
+                      <dd className="font-medium">{viewOrder.shipping_country}</dd>
+                    </div>
+                  </div>
+                </dl>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* Update Status Modal */}
       {updateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={() => setUpdateModal(null)}>
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 z-50 flex justify-center bg-background/80 backdrop-blur-sm p-4 !mt-0" onClick={() => setUpdateModal(null)}>
+          <div className="w-full max-w-md rounded-lg border border-border bg-card shadow-xl animate-fade-in self-start mt-20 max-h-[95vh] md:max-h-[85vh] lg:max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="font-heading text-lg font-bold">Update Order Status</h2>
               <button onClick={() => setUpdateModal(null)} className="p-1 text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-4 p-6 overflow-y-auto">
               <div>
                 <label className="text-sm text-muted-foreground mb-1 block">New Status</label>
                 <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}

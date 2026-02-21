@@ -68,7 +68,7 @@ export default function Category() {
       toast({ title: editCat ? "Category updated" : "Category created" });
       closeModal();
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const toggleMutation = useMutation({
@@ -77,7 +77,7 @@ export default function Category() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["categories-admin"] }),
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const openAdd = () => {
@@ -129,7 +129,7 @@ export default function Category() {
                 <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors">
                   <td className="px-6 py-4 font-medium">{cat.name}</td>
                   <td className="px-6 py-4 text-muted-foreground font-mono text-xs">{cat.slug}</td>
-                  <td className="px-6 py-4">{(cat.products as any)?.[0]?.count ?? 0}</td>
+                  <td className="px-6 py-4">{Array.isArray(cat.products) ? cat.products[0]?.count ?? 0 : 0}</td>
                   <td className="px-6 py-4 text-muted-foreground">{cat.sort_order}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cat.is_active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
@@ -157,13 +157,13 @@ export default function Category() {
       <Paginator page={page} total={total} pageSize={PAGE_SIZE} onPage={setPage} />
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={closeModal}>
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl animate-fade-in mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-heading text-lg font-bold">{editCat ? "Edit Category" : "Add Category"}</h2>
-              <button onClick={closeModal} className="p-1 text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+        <div className="fixed inset-0 z-50 flex justify-center bg-background/80 backdrop-blur-sm p-4 !mt-0" onClick={closeModal}>
+          <div className="w-full max-w-md rounded-lg border border-border bg-card shadow-xl animate-fade-in min-h-fit flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border shrink-0">
+              <h2 className="font-heading text-base sm:text-lg font-bold">{editCat ? "Edit Category" : "Add Category"}</h2>
+              <button onClick={closeModal} className="p-1 text-muted-foreground hover:text-foreground transition-colors"><X className="h-4 w-4 sm:h-5 sm:w-5" /></button>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4 p-4 sm:p-6 overflow-y-auto">
               <div>
                 <label className="text-sm text-muted-foreground mb-1 block">Name *</label>
                 <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -185,7 +185,7 @@ export default function Category() {
                   className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
               </div>
               <button onClick={() => saveMutation.mutate()} disabled={!form.name || saveMutation.isPending}
-                className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                className="w-full rounded-lg bg-primary px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                 {saveMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 {editCat ? "Update" : "Create"}
               </button>

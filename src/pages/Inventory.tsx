@@ -17,6 +17,16 @@ interface Variant {
   product_sizes: { size_label: string } | null;
 }
 
+interface VariantFromDB {
+  id: string;
+  sku: string;
+  stock_quantity: number;
+  low_stock_threshold: number;
+  products: { name: string }[] | null;
+  product_colors: { color_name: string }[] | null;
+  product_sizes: { size_label: string }[] | null;
+}
+
 export default function Inventory() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -36,7 +46,14 @@ export default function Inventory() {
         .order("stock_quantity", { ascending: true })
         .range(from, to);
       if (error) throw error;
-      return { variants: (data || []) as Variant[], total: count ?? 0 };
+      // Map Supabase array format to single object format
+      const variants = (data || []).map((row: VariantFromDB): Variant => ({
+        ...row,
+        products: row.products?.[0] ?? null,
+        product_colors: row.product_colors?.[0] ?? null,
+        product_sizes: row.product_sizes?.[0] ?? null,
+      }));
+      return { variants, total: count ?? 0 };
     },
   });
 
@@ -61,7 +78,7 @@ export default function Inventory() {
       toast({ title: "Stock updated" });
       setAdjustVariant(null);
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const getStatus = (v: Variant) => {
@@ -141,15 +158,15 @@ export default function Inventory() {
       <Paginator page={page} total={total} pageSize={PAGE_SIZE} onPage={setPage} />
 
       {adjustVariant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={() => setAdjustVariant(null)}>
-          <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6 shadow-xl mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-heading text-lg font-bold">Adjust Stock</h2>
-              <button onClick={() => setAdjustVariant(null)} className="p-1 text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+        <div className="fixed inset-0 z-50 flex justify-center bg-background/80 backdrop-blur-sm p-4 !mt-0" onClick={() => setAdjustVariant(null)}>
+          <div className="w-full max-w-sm rounded-lg border border-border bg-card shadow-xl animate-fade-in max-h-[95vh] md:max-h-fit lg:max-h-fit flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border shrink-0">
+              <h2 className="font-heading text-base sm:text-lg font-bold">Adjust Stock</h2>
+              <button onClick={() => setAdjustVariant(null)} className="p-1 text-muted-foreground hover:text-foreground transition-colors"><X className="h-4 w-4 sm:h-5 sm:w-5" /></button>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">{adjustVariant.products?.name} — {[adjustVariant.product_colors?.color_name, adjustVariant.product_sizes?.size_label].filter(Boolean).join(" / ")}</p>
-            <p className="text-xs text-muted-foreground mb-4 font-mono">{adjustVariant.sku} · Current: <strong>{adjustVariant.stock_quantity}</strong></p>
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4 p-4 sm:p-6 overflow-y-auto">
+              <p className="text-sm text-muted-foreground">{adjustVariant.products?.name} — {[adjustVariant.product_colors?.color_name, adjustVariant.product_sizes?.size_label].filter(Boolean).join(" / ")}</p>
+              <p className="text-xs text-muted-foreground font-mono">{adjustVariant.sku} · Current: <strong>{adjustVariant.stock_quantity}</strong></p>
               <div>
                 <label className="text-sm text-muted-foreground mb-1 block">New Quantity</label>
                 <input type="number" min="0" value={newQty} onChange={(e) => setNewQty(e.target.value)}
@@ -161,7 +178,7 @@ export default function Inventory() {
                   className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
               </div>
               <button onClick={() => adjustMutation.mutate()} disabled={adjustMutation.isPending || newQty === ""}
-                className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                className="w-full rounded-lg bg-primary px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                 {adjustMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Update Stock
               </button>

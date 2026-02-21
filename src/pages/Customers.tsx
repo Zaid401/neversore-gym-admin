@@ -25,24 +25,64 @@ export default function Customers() {
     queryFn: async () => {
       const from = (page - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
-      const { data, error, count } = await supabase
+      
+      // First, get profiles
+      let profileQuery = supabase
         .from("profiles")
-        .select("id,full_name,email,phone,created_at", { count: "exact" })
+        .select("id,full_name,email,created_at", { count: "exact" })
         .eq("role", "customer")
-        .ilike(search.trim() ? "full_name" : "role", search.trim() ? `%${search.trim()}%` : "customer")
         .order("created_at", { ascending: false })
         .range(from, to);
-      if (error) {
-        // fallback without search filter if RLS/column issues
-        const { data: fb, count: fc } = await supabase
-          .from("profiles")
-          .select("id,full_name,email,phone,created_at", { count: "exact" })
-          .eq("role", "customer")
-          .order("created_at", { ascending: false })
-          .range(from, to);
-        return { customers: (fb || []).map((p) => ({ ...p, order_count: 0, total_spent: 0 })) as Customer[], total: fc ?? 0 };
+      
+      // Apply search filter if provided
+      if (search.trim()) {
+        profileQuery = profileQuery.or(`full_name.ilike.%${search.trim()}%,email.ilike.%${search.trim()}%`);
       }
-      return { customers: (data || []).map((p) => ({ ...p, order_count: 0, total_spent: 0 })) as Customer[], total: count ?? 0 };
+      
+      const { data: profilesData, error: profilesError, count } = await profileQuery;
+      
+      if (profilesError) throw profilesError;
+      if (!profilesData || profilesData.length === 0) {
+        return { customers: [], total: count ?? 0 };
+      }
+      
+      const userIds = profilesData.map(p => p.id);
+      
+      // Get order stats for these users
+      const { data: orderStats } = await supabase
+        .from("orders")
+        .select("user_id,total_amount,shipping_phone,created_at")
+        .in("user_id", userIds)
+        .order("created_at", { ascending: false });
+      
+      // Aggregate data per user
+      const customerMap = new Map<string, Customer>();
+      profilesData.forEach(profile => {
+        customerMap.set(profile.id, {
+          ...profile,
+          phone: null,
+          order_count: 0,
+          total_spent: 0,
+        });
+      });
+      
+      // Calculate stats from orders
+      orderStats?.forEach(order => {
+        const customer = customerMap.get(order.user_id);
+        if (customer) {
+          customer.order_count++;
+          customer.total_spent += Number(order.total_amount) || 0;
+          // Use phone from most recent order (first in ordered list)
+          if (!customer.phone && order.shipping_phone) {
+            customer.phone = order.shipping_phone;
+          }
+        }
+      });
+      
+      return { 
+        customers: Array.from(customerMap.values()), 
+        total: count ?? 0 
+      };
     },
   });
 
