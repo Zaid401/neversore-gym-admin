@@ -8,6 +8,7 @@ import {
   Loader2,
   ImagePlus,
   XCircle,
+  Palette,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
@@ -25,6 +26,13 @@ interface ProductVariant {
   stock_quantity: number;
 }
 
+interface ColorEntry {
+  _key: string;          // client-side unique key
+  id: string | null;     // existing DB id (null = new, not yet saved)
+  color_name: string;
+  color_hex: string;
+}
+
 interface ProductRow {
   id: string;
   name: string;
@@ -36,7 +44,7 @@ interface ProductRow {
   category_id: string | null;
   short_description: string | null;
   description: string | null;
-  categories: Category[] | null;
+  categories: Category | null;
   product_variants: ProductVariant[];
 }
 
@@ -92,6 +100,9 @@ export default function Products() {
     null,
   ]);
   const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const colorKeyCounter = useRef(0);
+  const [colorEntries, setColorEntries] = useState<ColorEntry[]>([]);
+  const [selectedSizeIds, setSelectedSizeIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -115,7 +126,7 @@ export default function Products() {
       const products = (data || []).map(
         (row): Product => ({
           ...row,
-          categories: row.categories?.[0] ?? null,
+          categories: (row.categories as unknown as Category | null) ?? null,
         }),
       );
       return { products, total: count ?? 0 };
@@ -137,6 +148,15 @@ export default function Products() {
       return data || [];
     },
   });
+
+  const globalSizes = [
+    { id: "S", size_label: "S" },
+    { id: "M", size_label: "M" },
+    { id: "L", size_label: "L" },
+    { id: "XL", size_label: "XL" },
+    { id: "XXL", size_label: "XXL" },
+    { id: "XXXL", size_label: "XXXL" },
+  ];
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -189,6 +209,96 @@ export default function Products() {
         });
       });
       await Promise.all(uploadPromises);
+
+      // === COLORS & VARIANTS ===
+      const validColors = colorEntries.filter((c) => c.color_name.trim());
+      if (productId && validColors.length > 0 && selectedSizeIds.size > 0) {
+        const nameSlug = slugify(form.name);
+
+        // Ensure sizes exist in DB (upsert by size_label), get back UUIDs
+        const sizeLabels = globalSizes
+          .filter((s) => selectedSizeIds.has(s.id))
+          .map((s, i) => ({ size_label: s.size_label, sort_order: i }));
+        const { data: upsertedSizes } = await supabase
+          .from("sizes")
+          .upsert(sizeLabels, { onConflict: "size_label", ignoreDuplicates: true })
+          .select("id,size_label");
+        // Fetch all needed sizes (upsert with ignoreDuplicates won't return existing rows)
+        const { data: fetchedSizes } = await supabase
+          .from("sizes")
+          .select("id,size_label")
+          .in("size_label", sizeLabels.map((s) => s.size_label));
+        const sizeIdByLabel = new Map(
+          (fetchedSizes || upsertedSizes || []).map((s) => [s.size_label, s.id])
+        );
+
+        // Fetch existing colors for this product
+        const { data: existingColors } = await supabase
+          .from("product_colors")
+          .select("id,color_name,color_hex")
+          .eq("product_id", productId);
+
+        const existingMap = new Map(
+          (existingColors || []).map((c) => [`${c.color_name}||${c.color_hex}`, c.id])
+        );
+
+        // Insert new colors, collect final color ids with display abbreviation
+        const finalColors: Array<{ id: string; abbrev: string }> = [];
+        let sortIdx = 0;
+        for (const entry of validColors) {
+          const key = `${entry.color_name.trim()}||${entry.color_hex}`;
+          const existingId = existingMap.get(key);
+          if (existingId) {
+            finalColors.push({
+              id: existingId,
+              abbrev: entry.color_name.split(" ").map((w) => w[0]).join("").toUpperCase(),
+            });
+          } else {
+            const { data: newColor } = await supabase
+              .from("product_colors")
+              .insert({
+                product_id: productId,
+                color_name: entry.color_name.trim(),
+                color_hex: entry.color_hex,
+                sort_order: sortIdx,
+              })
+              .select("id")
+              .single();
+            if (newColor) {
+              finalColors.push({
+                id: newColor.id,
+                abbrev: entry.color_name.split(" ").map((w) => w[0]).join("").toUpperCase(),
+              });
+            }
+          }
+          sortIdx++;
+        }
+
+        // Delete colors that were removed (cascades their product_variants)
+        const keepIds = finalColors.map((fc) => fc.id);
+        const toDelete = (existingColors || [])
+          .filter((c) => !keepIds.includes(c.id))
+          .map((c) => c.id);
+        if (toDelete.length > 0) {
+          await supabase.from("product_colors").delete().in("id", toDelete);
+        }
+
+        // Upsert variants for every color × selected size
+        // ignoreDuplicates: true preserves existing stock_quantity
+        for (const { id: colorId, abbrev } of finalColors) {
+          for (const sizeLabel of selectedSizeIds) {
+            const dbSizeId = sizeIdByLabel.get(sizeLabel);
+            if (!dbSizeId) continue;
+            const sku = `${nameSlug}-${abbrev}-${sizeLabel}`.toUpperCase();
+            await supabase
+              .from("product_variants")
+              .upsert(
+                { product_id: productId, color_id: colorId, size_id: dbSizeId, sku, is_active: true },
+                { onConflict: "product_id,color_id,size_id", ignoreDuplicates: true }
+              );
+          }
+        }
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["products"] });
@@ -239,6 +349,8 @@ export default function Products() {
     });
     setImagePreviews([null, null, null, null, null]);
     setImageFiles([null, null, null, null, null]);
+    setColorEntries([]);
+    setSelectedSizeIds(new Set());
     setShowModal(true);
   };
 
@@ -265,6 +377,34 @@ export default function Products() {
     });
     setImagePreviews(previews);
     setImageFiles([null, null, null, null, null]);
+
+    // Load existing colors
+    const { data: colors } = await supabase
+      .from("product_colors")
+      .select("id,color_name,color_hex")
+      .eq("product_id", p.id)
+      .order("sort_order");
+    setColorEntries(
+      (colors || []).map((c) => ({
+        _key: c.id,
+        id: c.id,
+        color_name: c.color_name,
+        color_hex: c.color_hex,
+      }))
+    );
+
+    // Load selected size labels from existing variants (join with sizes table)
+    const { data: variantSizes } = await supabase
+      .from("product_variants")
+      .select("sizes(size_label)")
+      .eq("product_id", p.id);
+    const sizeLabels = new Set(
+      (variantSizes || [])
+        .map((v) => (v.sizes as unknown as { size_label: string } | null)?.size_label)
+        .filter(Boolean) as string[]
+    );
+    setSelectedSizeIds(sizeLabels);
+
     setShowModal(true);
   };
 
@@ -311,6 +451,34 @@ export default function Products() {
 
   const getTotalStock = (p: Product) =>
     p.product_variants?.reduce((sum, v) => sum + v.stock_quantity, 0) ?? 0;
+
+  // ── Color / Size helpers ───────────────────────────────────────────────────
+  const addColor = () => {
+    colorKeyCounter.current += 1;
+    setColorEntries((prev) => [
+      ...prev,
+      { _key: `new-${colorKeyCounter.current}`, id: null, color_name: "", color_hex: "#000000" },
+    ]);
+  };
+
+  const removeColor = (key: string) =>
+    setColorEntries((prev) => prev.filter((c) => c._key !== key));
+
+  const updateColor = (key: string, field: "color_name" | "color_hex", value: string) =>
+    setColorEntries((prev) =>
+      prev.map((c) => (c._key === key ? { ...c, [field]: value } : c))
+    );
+
+  const toggleSize = (sizeId: string) =>
+    setSelectedSizeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(sizeId)) {
+        next.delete(sizeId);
+      } else {
+        next.add(sizeId);
+      }
+      return next;
+    });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -603,7 +771,95 @@ export default function Products() {
                 </label>
               </div>
 
-              {/* Image Upload â€” max 5 */}
+              {/* Colors */}
+              <div className="border-t border-border pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                    <Palette className="h-4 w-4 text-muted-foreground" />
+                    Product Colors
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addColor}
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    <Plus className="h-3 w-3" /> Add Color
+                  </button>
+                </div>
+                {colorEntries.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    No colors yet — click "Add Color" to define variants.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {colorEntries.map((entry) => (
+                      <div key={entry._key} className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={entry.color_hex}
+                          onChange={(e) => updateColor(entry._key, "color_hex", e.target.value)}
+                          className="h-8 w-8 cursor-pointer rounded border border-border bg-transparent p-0.5 shrink-0"
+                          title="Pick hex color"
+                        />
+                        <input
+                          value={entry.color_name}
+                          onChange={(e) => updateColor(entry._key, "color_name", e.target.value)}
+                          placeholder="e.g. Midnight Black"
+                          className="flex-1 rounded-lg border border-border bg-secondary px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeColor(entry._key)}
+                          className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Sizes */}
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">
+                  Available Sizes
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">
+                    (variants auto-generated for each color × size)
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {globalSizes.map((size) => {
+                    const active = selectedSizeIds.has(size.id);
+                    return (
+                      <button
+                        key={size.id}
+                        type="button"
+                        onClick={() => toggleSize(size.id)}
+                        className={`rounded border px-3 py-1.5 text-xs font-bold uppercase transition-colors ${
+                          active
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:border-primary/40"
+                        }`}
+                      >
+                        {size.size_label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {colorEntries.filter((c) => c.color_name.trim()).length > 0 && selectedSizeIds.size > 0 && (
+                  <p className="mt-1.5 text-xs text-success">
+                    {colorEntries.filter((c) => c.color_name.trim()).length} color
+                    {colorEntries.filter((c) => c.color_name.trim()).length !== 1 ? "s" : ""} ×{" "}
+                    {selectedSizeIds.size} size
+                    {selectedSizeIds.size !== 1 ? "s" : ""} ={" "}
+                    {colorEntries.filter((c) => c.color_name.trim()).length * selectedSizeIds.size} variant
+                    {colorEntries.filter((c) => c.color_name.trim()).length * selectedSizeIds.size !== 1 ? "s" : ""} will be generated
+                  </p>
+                )}
+              </div>
+
+              {/* Image Upload — max 5 */}
               <div>
                 <label className="text-sm text-muted-foreground mb-2 block">
                   Product Images (max 5)
