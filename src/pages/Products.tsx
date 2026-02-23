@@ -41,6 +41,7 @@ interface ProductRow {
   sale_price: number | null;
   is_active: boolean;
   is_featured: boolean;
+  is_best_selling: boolean;
   category_id: string | null;
   short_description: string | null;
   description: string | null;
@@ -56,6 +57,7 @@ interface Product {
   sale_price: number | null;
   is_active: boolean;
   is_featured: boolean;
+  is_best_selling: boolean;
   category_id: string | null;
   short_description: string | null;
   description: string | null;
@@ -83,6 +85,7 @@ export default function Products() {
     short_description: "",
     description: "",
     is_featured: false,
+    is_best_selling: false,
   });
   // Images: up to 5 slots. Each slot is a preview URL (existing) or a File (new)
   const [imagePreviews, setImagePreviews] = useState<(string | null)[]>([
@@ -114,7 +117,7 @@ export default function Products() {
       let q = supabase
         .from("products")
         .select(
-          "id,name,slug,base_price,sale_price,is_active,is_featured,category_id,short_description,description,categories(id,name),product_variants(stock_quantity)",
+          "id,name,slug,base_price,sale_price,is_active,is_featured,is_best_selling,category_id,short_description,description,categories(id,name),product_variants(stock_quantity)",
           { count: "exact" },
         )
         .order("created_at", { ascending: false })
@@ -169,8 +172,21 @@ export default function Products() {
         short_description: form.short_description || null,
         description: form.description || null,
         is_featured: form.is_featured,
+        is_best_selling: form.is_best_selling,
         is_active: true,
       };
+
+      // Enforce max-4 best-selling constraint
+      if (form.is_best_selling) {
+        const { count } = await supabase
+          .from("products")
+          .select("id", { count: "exact", head: true })
+          .eq("is_best_selling", true)
+          .neq("id", editProduct?.id ?? "");
+        if ((count ?? 0) >= 4) {
+          throw new Error("Only 4 products can be marked as best selling at a time. Please unmark another product first.");
+        }
+      }
 
       let productId = editProduct?.id;
       if (editProduct) {
@@ -346,6 +362,7 @@ export default function Products() {
       short_description: "",
       description: "",
       is_featured: false,
+      is_best_selling: false,
     });
     setImagePreviews([null, null, null, null, null]);
     setImageFiles([null, null, null, null, null]);
@@ -364,6 +381,7 @@ export default function Products() {
       short_description: p.short_description || "",
       description: p.description || "",
       is_featured: p.is_featured,
+      is_best_selling: p.is_best_selling,
     });
     // Load existing images for this product
     const { data: imgs } = await supabase
@@ -572,6 +590,11 @@ export default function Products() {
                                 ★ Featured
                               </span>
                             )}
+                            {product.is_best_selling && (
+                              <span className="ml-2 text-xs text-orange-500">
+                                🏆 Best Seller
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -753,22 +776,42 @@ export default function Products() {
                   className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-20 resize-none"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="featured"
-                  checked={form.is_featured}
-                  onChange={(e) =>
-                    setForm({ ...form, is_featured: e.target.checked })
-                  }
-                  className="h-4 w-4 accent-primary"
-                />
-                <label
-                  htmlFor="featured"
-                  className="text-sm text-muted-foreground"
-                >
-                  Mark as featured
-                </label>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="featured"
+                    checked={form.is_featured}
+                    onChange={(e) =>
+                      setForm({ ...form, is_featured: e.target.checked })
+                    }
+                    className="h-4 w-4 accent-primary"
+                  />
+                  <label
+                    htmlFor="featured"
+                    className="text-sm text-muted-foreground"
+                  >
+                    Mark as featured
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="best_selling"
+                    checked={form.is_best_selling}
+                    onChange={(e) =>
+                      setForm({ ...form, is_best_selling: e.target.checked })
+                    }
+                    className="h-4 w-4 accent-primary"
+                  />
+                  <label
+                    htmlFor="best_selling"
+                    className="text-sm text-muted-foreground"
+                  >
+                    Mark as best selling
+                    <span className="ml-1 text-xs text-orange-500">(max 4)</span>
+                  </label>
+                </div>
               </div>
 
               {/* Colors */}
