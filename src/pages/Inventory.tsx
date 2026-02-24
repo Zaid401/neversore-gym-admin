@@ -14,7 +14,7 @@ interface Variant {
   low_stock_threshold: number;
   products: { name: string } | null;
   product_colors: { color_name: string } | null;
-  sizes: { size_label: string } | null;
+  product_sizes: { size_label: string } | null;
 }
 
 interface VariantFromDB {
@@ -24,7 +24,7 @@ interface VariantFromDB {
   low_stock_threshold: number;
   products: { name: string }[] | null;
   product_colors: { color_name: string }[] | null;
-  sizes: { size_label: string }[] | null;
+  product_sizes: { size_label: string }[] | null;
 }
 
 export default function Inventory() {
@@ -42,7 +42,7 @@ export default function Inventory() {
       const to = from + PAGE_SIZE - 1;
       const { data, error, count } = await supabase
         .from("product_variants")
-        .select("id,sku,stock_quantity,low_stock_threshold,products(name),product_colors(color_name),sizes(size_label)", { count: "exact" })
+        .select("id,sku,stock_quantity,low_stock_threshold,products(name),product_colors(color_name),product_sizes(size_label)", { count: "exact" })
         .order("stock_quantity", { ascending: true })
         .range(from, to);
       if (error) throw error;
@@ -51,7 +51,7 @@ export default function Inventory() {
         ...row,
         products: row.products?.[0] ?? null,
         product_colors: row.product_colors?.[0] ?? null,
-        sizes: row.sizes?.[0] ?? null,
+        product_sizes: row.product_sizes?.[0] ?? null,
       }));
       return { variants, total: count ?? 0 };
     },
@@ -135,7 +135,7 @@ export default function Inventory() {
                     </td>
                     <td className="px-6 py-4 text-muted-foreground font-mono text-xs">{v.sku}</td>
                     <td className="px-6 py-4 text-muted-foreground">
-                      {[v.product_colors?.color_name, v.sizes?.size_label].filter(Boolean).join(" / ")}
+                      {[v.product_colors?.color_name, v.product_sizes?.size_label].filter(Boolean).join(" / ")}
                     </td>
                     <td className="px-6 py-4">
                       <span className={status !== "ok" ? "text-destructive font-semibold" : ""}>{v.stock_quantity}</span>
@@ -167,7 +167,7 @@ export default function Inventory() {
               <button onClick={() => setAdjustVariant(null)} className="p-1 text-muted-foreground hover:text-foreground transition-colors"><X className="h-4 w-4 sm:h-5 sm:w-5" /></button>
             </div>
             <div className="space-y-3 sm:space-y-4 p-4 sm:p-6 overflow-y-auto">
-              <p className="text-sm text-muted-foreground">{adjustVariant.products?.name} — {[adjustVariant.product_colors?.color_name, adjustVariant.sizes?.size_label].filter(Boolean).join(" / ")}</p>
+              <p className="text-sm text-muted-foreground">{adjustVariant.products?.name} — {[adjustVariant.product_colors?.color_name, adjustVariant.product_sizes?.size_label].filter(Boolean).join(" / ")}</p>
               <p className="text-xs text-muted-foreground font-mono">{adjustVariant.sku} · Current: <strong>{adjustVariant.stock_quantity}</strong></p>
               <div>
                 <label className="text-sm text-muted-foreground mb-1 block">New Quantity</label>
