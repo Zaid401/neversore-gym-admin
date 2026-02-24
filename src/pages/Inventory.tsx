@@ -67,11 +67,10 @@ export default function Inventory() {
       if (updateErr) throw updateErr;
       const { error: logErr } = await supabase.from("inventory_logs").insert({
         variant_id: adjustVariant!.id,
-        change_type: diff >= 0 ? "restock" : "manual_adjustment",
-        quantity_change: diff,
+        change_quantity: diff,
         previous_quantity: previousQty,
         new_quantity: qty,
-        reason: reason || "Manual admin adjustment",
+        reason: reason || (diff >= 0 ? "Restock — admin adjustment" : "Manual reduction — admin adjustment"),
       });
       if (logErr) throw logErr;
     },
