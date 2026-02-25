@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -41,8 +42,11 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, profile, user } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const displayName = profile?.full_name || user?.email?.split("@")[0] || "Admin";
+  const initials = displayName.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
 
   return (
     <>
@@ -110,6 +114,34 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
             })}
           </ul>
         </nav>
+
+        {/* User info */}
+        {/* {!collapsed && (
+          <div className="border-t border-border px-3 py-3">
+            <div className="flex items-center gap-2.5 rounded-lg bg-accent/50 px-2.5 py-2">
+              <Avatar className="h-7 w-7 shrink-0">
+                <AvatarImage src={profile?.avatar_url ?? undefined} alt={displayName} />
+                <AvatarFallback className="bg-primary/20 text-primary text-xs font-bold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold truncate">{displayName}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{profile?.email || user?.email}</p>
+              </div>
+            </div>
+          </div>
+        )}
+        {collapsed && (
+          <div className="border-t border-border px-2 py-3 flex justify-center">
+            <Avatar className="h-7 w-7">
+              <AvatarImage src={profile?.avatar_url ?? undefined} alt={displayName} />
+              <AvatarFallback className="bg-primary/20 text-primary text-xs font-bold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        )} */}
 
         {/* Logout */}
         <div className="border-t border-border p-2">

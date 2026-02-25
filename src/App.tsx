@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Dashboard from "./pages/Index";
 import Orders from "./pages/Orders";
@@ -59,8 +60,10 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            <NotificationProvider>
             <AppRoutes />
-          </AuthProvider>
+            </NotificationProvider>
+        </AuthProvider>
         </BrowserRouter>
       </ThemeProvider>
     </TooltipProvider>
