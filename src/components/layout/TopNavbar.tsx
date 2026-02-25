@@ -1,5 +1,6 @@
-import { Bell, Search, Menu, ChevronDown } from "lucide-react";
+import { Bell, Search, Menu, ChevronDown, Sun, Moon } from "lucide-react";
 import { useLocation } from "react-router-dom";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
@@ -20,6 +21,7 @@ interface TopNavbarProps {
 export default function TopNavbar({ onMenuClick }: TopNavbarProps) {
   const location = useLocation();
   const title = pageTitles[location.pathname] || "Dashboard";
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/80 backdrop-blur-md px-4 lg:px-8">
@@ -47,6 +49,18 @@ export default function TopNavbar({ onMenuClick }: TopNavbarProps) {
 
       {/* Right side */}
       <div className="flex items-center gap-3">
+        <button 
+          onClick={toggleTheme}
+          className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors"
+          aria-label="Toggle theme"
+        >
+          {theme === "dark" ? (
+            <Sun className="h-5 w-5" />
+          ) : (
+            <Moon className="h-5 w-5" />
+          )}
+        </button>
+
         <button className="relative p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors">
           <Bell className="h-5 w-5" />
           <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
