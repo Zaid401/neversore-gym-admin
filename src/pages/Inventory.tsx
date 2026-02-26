@@ -274,7 +274,7 @@ export default function Inventory() {
                   className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
               </div>
               <button onClick={() => adjustMutation.mutate()} disabled={adjustMutation.isPending || newQty === ""}
-                className="w-full rounded-lg bg-primary px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                className="w-full rounded-lg bg-primary px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold uppercase text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                 {adjustMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Update Stock
               </button>

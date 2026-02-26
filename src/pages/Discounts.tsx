@@ -101,7 +101,7 @@ export default function Discounts() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-end">
         <button onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors">
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold uppercase  text-primary-foreground hover:bg-primary/90 transition-colors">
           <Plus className="h-4 w-4" /> Add Coupon
         </button>
       </div>
@@ -227,7 +227,7 @@ export default function Discounts() {
                 </div>
               </div>
               <button onClick={() => createMutation.mutate()} disabled={!form.code || !form.discount_value || createMutation.isPending}
-                className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold uppercase  text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                 {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Create Coupon
               </button>

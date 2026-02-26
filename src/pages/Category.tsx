@@ -98,11 +98,11 @@ export default function Category() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-heading font-bold tracking-tight text-foreground">Categories</h1>
+          <h1 className="text-3xl font-heading font-bold  text-foreground">Categories</h1>
           <p className="text-muted-foreground mt-1">Manage your product categories</p>
         </div>
         <button onClick={openAdd}
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors">
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold uppercase text-primary-foreground hover:bg-primary/90 transition-colors">
           <Plus className="h-4 w-4" /> Add Category
         </button>
       </div>
@@ -185,7 +185,7 @@ export default function Category() {
                   className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
               </div>
               <button onClick={() => saveMutation.mutate()} disabled={!form.name || saveMutation.isPending}
-                className="w-full rounded-lg bg-primary px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                className="w-full rounded-lg bg-primary px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold uppercase  text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                 {saveMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 {editCat ? "Update" : "Create"}
               </button>

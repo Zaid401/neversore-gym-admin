@@ -137,7 +137,7 @@ export default function ProfileModal({ open, onOpenChange }: ProfileModalProps) 
         <button
           onClick={handleSaveProfile}
           disabled={saving}
-          className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 w-full justify-center"
+          className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold uppercase text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 w-full justify-center"
         >
           {saving && <Loader2 className="h-4 w-4 animate-spin" />}
           {saving ? "Saving…" : "Save Profile"}

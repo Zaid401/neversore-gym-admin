@@ -94,7 +94,7 @@ export default function Login() {
 
             <Button
               type="submit"
-              className="w-full uppercase tracking-widest font-semibold"
+              className="w-full uppercase  font-semibold"
               disabled={isSubmitting}
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign In"}
