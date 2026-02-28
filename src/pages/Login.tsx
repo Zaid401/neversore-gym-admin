@@ -38,7 +38,7 @@ export default function Login() {
       >
         <div className="text-center mb-8">
           <img 
-            src="/logo.png" 
+            src="/newLogo.png" 
             alt="NEVERSORE" 
             className="h-16 mx-auto mb-4"
           />
