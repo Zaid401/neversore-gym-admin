@@ -69,7 +69,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         <div className="flex h-16 items-center justify-between border-b border-border px-4">
           {!collapsed && (
             <img 
-              src="/logo.png" 
+              src="/newLogo.png" 
               alt="NEVERSORE" 
               className="h-10"
             />
