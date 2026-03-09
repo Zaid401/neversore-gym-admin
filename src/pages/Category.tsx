@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Pencil, Trash2, Loader2, X } from "lucide-react";
+import { useState, useRef } from "react";
+import { Plus, Pencil, Trash2, Loader2, X, Upload } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
@@ -28,6 +28,9 @@ export default function Category() {
   const [showModal, setShowModal] = useState(false);
   const [editCat, setEditCat] = useState<Category | null>(null);
   const [form, setForm] = useState({ name: "", description: "", image_url: "", sort_order: "0" });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [page, setPage] = useState(1);
 
   const { data: { categories, total } = { categories: [], total: 0 }, isLoading } = useQuery<{ categories: Category[]; total: number }>({
@@ -47,11 +50,28 @@ export default function Category() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      let imageUrl = form.image_url;
+
+      if (imageFile) {
+        const ext = imageFile.name.split(".").pop();
+        const path = `category-${Date.now()}.${ext}`;
+        const { error: storageErr } = await supabase.storage
+          .from("category-images")
+          .upload(path, imageFile, { upsert: true });
+        if (storageErr) throw storageErr;
+        const { data: urlData } = supabase.storage.from("category-images").getPublicUrl(path);
+        imageUrl = urlData.publicUrl;
+      } else if (editCat?.image_url && !imageUrl) {
+        // No new file picked — keep the existing stored URL
+        imageUrl = editCat.image_url;
+      }
+
+      // Preserve existing slug when editing — changing slugs breaks product page URLs
       const payload = {
         name: form.name,
-        slug: slugify(form.name),
+        ...(editCat ? {} : { slug: slugify(form.name) }),
         description: form.description || null,
-        image_url: form.image_url || null,
+        image_url: imageUrl || null,
         sort_order: parseInt(form.sort_order) || 0,
       };
       if (editCat) {
@@ -83,16 +103,20 @@ export default function Category() {
   const openAdd = () => {
     setEditCat(null);
     setForm({ name: "", description: "", image_url: "", sort_order: "0" });
+    setImageFile(null);
+    setImagePreview(null);
     setShowModal(true);
   };
 
   const openEdit = (cat: Category) => {
     setEditCat(cat);
     setForm({ name: cat.name, description: cat.description || "", image_url: cat.image_url || "", sort_order: String(cat.sort_order) });
+    setImageFile(null);
+    setImagePreview(cat.image_url || null);
     setShowModal(true);
   };
 
-  const closeModal = () => { setShowModal(false); setEditCat(null); };
+  const closeModal = () => { setShowModal(false); setEditCat(null); setImageFile(null); setImagePreview(null); };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -175,9 +199,40 @@ export default function Category() {
                   className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-16 resize-none" />
               </div>
               <div>
-                <label className="text-sm text-muted-foreground mb-1 block">Image URL</label>
-                <input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })}
-                  className="w-full rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                <label className="text-sm text-muted-foreground mb-1 block">Image</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setImageFile(file);
+                    setImagePreview(URL.createObjectURL(file));
+                  }}
+                />
+                {imagePreview ? (
+                  <div className="relative w-full h-36 rounded-lg overflow-hidden border border-border bg-secondary">
+                    <img src={imagePreview} alt="preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => { setImageFile(null); setImagePreview(null); setForm({ ...form, image_url: "" }); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                      className="absolute top-2 right-2 rounded-full bg-background/80 p-1 text-foreground hover:bg-background transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-secondary px-4 py-6 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Click to upload image
+                  </button>
+                )}
               </div>
               <div>
                 <label className="text-sm text-muted-foreground mb-1 block">Sort Order</label>
